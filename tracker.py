@@ -376,6 +376,202 @@ class AnalyticsEngine:
             "confidence_level": AnalyticsEngine.calculate_confidence_level(course_id)
         }
     
+# ============================================
+# SCHEDULE GENERATOR - Complete Implementation
+# ============================================
+
+from datetime import datetime, time
+
+class ScheduleGenerator:
+    """
+    Generate weekly study schedules based on course weights
+    
+    This class creates an optimal study timetable that:
+    - Allocates time proportionally to course units
+    - Avoids conflicts with class times
+    - Distributes study sessions across the week
+    - Creates 2-hour study blocks for effectiveness
+    """
+    
+    @staticmethod
+    def generate_weekly_schedule(total_study_hours=20, session_duration=2):
+        """
+        Create a complete weekly study schedule
+        
+        Args:
+            total_study_hours: Total hours available for study per week (default: 20)
+            session_duration: Length of each study session in hours (default: 2)
+            
+        Returns:
+            List of schedule entries ready to be saved to data.json
+            
+        Example:
+            schedule = ScheduleGenerator.generate_weekly_schedule(20, 2)
+            # Returns: [
+            #   {"id": "sched_1", "day": "Monday", "time_slot": "14:00-16:00", 
+            #    "course_id": "course_1", "type": "study"},
+            #   ...
+            # ]
+        """
+        data = load_data()
+        courses = data["courses"]
+        
+        if not courses:
+            print("No courses found. Add courses first.")
+            return []
+        
+        # Step 1: Calculate total units across all courses
+        total_units = sum(c["units"] for c in courses)
+        print(f"\n📊 Total units across all courses: {total_units}")
+        
+        # Step 2: Calculate how many hours each course should get
+        course_allocations = []
+        for course in courses:
+            # Weighted allocation: course gets (its units / total units) × total hours
+            allocated_hours = (course["units"] / total_units) * total_study_hours
+            num_sessions = int(allocated_hours / session_duration)  # Round down
+            
+            course_allocations.append({
+                "course": course,
+                "allocated_hours": allocated_hours,
+                "num_sessions": num_sessions
+            })
+            
+            print(f"  {course['name']}: {allocated_hours:.1f} hours ({num_sessions} sessions)")
+        
+        # Step 3: Create schedule entries
+        schedule_entries = []
+        days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", 
+                       "Friday", "Saturday", "Sunday"]
+        
+        # Start time for study sessions (2 PM = 14:00)
+        base_start_hour = 14
+        
+        # Distribute sessions across the week
+        for allocation in course_allocations:
+            course = allocation["course"]
+            sessions_needed = allocation["num_sessions"]
+            sessions_created = 0
+            day_index = 0
+            
+            # Try to create sessions for this course
+            while sessions_created < sessions_needed and day_index < len(days_of_week):
+                day = days_of_week[day_index]
+                
+                # Calculate time slot for this session
+                # Space out sessions: first course gets 14:00, next gets 16:00, etc.
+                hour_offset = sessions_created * session_duration
+                start_hour = base_start_hour + hour_offset
+                end_hour = start_hour + session_duration
+                
+                # Make sure we don't go past 10 PM (22:00)
+                if end_hour > 22:
+                    day_index += 1
+                    sessions_created = 0
+                    continue
+                
+                # Check if this time conflicts with class schedule
+                time_slot = f"{start_hour:02d}:00-{end_hour:02d}:00"
+                
+                if not ScheduleGenerator._has_class_conflict(course, day, start_hour, end_hour):
+                    # No conflict - create the study session
+                    entry_id = f"sched_{len(schedule_entries) + 1}"
+                    
+                    schedule_entries.append({
+                        "id": entry_id,
+                        "day": day,
+                        "time_slot": time_slot,
+                        "course_id": course["id"],
+                        "type": "study"
+                    })
+                    
+                    sessions_created += 1
+                    print(f"    ✓ Created: {course['name']} on {day} at {time_slot}")
+                
+                # Move to next potential time slot
+                if sessions_created < sessions_needed:
+                    day_index += 1
+        
+        print(f"\n✓ Generated {len(schedule_entries)} study sessions")
+        return schedule_entries
+    
+    @staticmethod
+    def _has_class_conflict(course, day, start_hour, end_hour):
+        """
+        Check if a proposed study time conflicts with class time
+        
+        Args:
+            course: The course dict
+            day: Day of week (e.g., "Monday")
+            start_hour: Start hour (24-hour format, e.g., 14)
+            end_hour: End hour (24-hour format, e.g., 16)
+            
+        Returns:
+            True if there's a conflict, False otherwise
+        """
+        for class_time in course.get("schedule", []):
+            # Check if this class is on the same day
+            if class_time["day"] == day:
+                # Parse class start and end times
+                class_start = int(class_time["start"].split(":")[0])
+                class_end = int(class_time["end"].split(":")[0])
+                
+                # Check for overlap
+                # Overlap if: study_start < class_end AND study_end > class_start
+                if start_hour < class_end and end_hour > class_start:
+                    return True
+        
+        return False
+    
+    @staticmethod
+    def save_schedule_to_db(schedule_entries):
+        """
+        Save generated schedule to data.json
+        
+        Args:
+            schedule_entries: List of schedule dicts from generate_weekly_schedule()
+        """
+        data = load_data()
+        
+        # Clear old schedule
+        data["weekly_schedule"] = []
+        
+        # Add class times to schedule first
+        for course in data["courses"]:
+            for class_time in course.get("schedule", []):
+                entry_id = f"class_{course['id']}_{class_time['day']}"
+                data["weekly_schedule"].append({
+                    "id": entry_id,
+                    "day": class_time["day"],
+                    "time_slot": f"{class_time['start']}-{class_time['end']}",
+                    "course_id": course["id"],
+                    "type": "class"
+                })
+        
+        # Add generated study sessions
+        data["weekly_schedule"].extend(schedule_entries)
+        
+        save_data(data)
+        print(f"✓ Saved {len(schedule_entries)} study sessions + class times to database")
+    
+    @staticmethod
+    def regenerate_full_schedule(total_study_hours=20):
+        """
+        Convenience method to generate and save schedule in one call
+        
+        Args:
+            total_study_hours: Hours available for study per week
+        """
+        print("🔄 Generating new weekly schedule...")
+        schedule = ScheduleGenerator.generate_weekly_schedule(total_study_hours)
+        
+        if schedule:
+            ScheduleGenerator.save_schedule_to_db(schedule)
+            return True
+        else:
+            print("✗ Failed to generate schedule")
+            return False
+    
 if __name__ == "__main__":
     print("\n" + "="*50)
     print("TESTING STUDY TRACKER DATA LAYER")
@@ -471,8 +667,27 @@ if __name__ == "__main__":
             print(f"  ⚠️  {course['course']}: {course['actual_hours']}h / {course['expected_hours']}h expected")
     else:
         print("  ✓ All courses on track!")
+
+     # NEW TEST 11: Generate Weekly Schedule
+    print("\nTEST 11: Generating Weekly Schedule...")
+    success = ScheduleGenerator.regenerate_full_schedule(total_study_hours=20)
+    
+    if success:
+        data = load_data()
+        study_sessions = [s for s in data["weekly_schedule"] if s["type"] == "study"]
+        class_times = [s for s in data["weekly_schedule"] if s["type"] == "class"]
+        print(f"  ✓ Created {len(study_sessions)} study sessions")
+        print(f"  ✓ Added {len(class_times)} class times")
+        
+        # Show a sample
+        if study_sessions:
+            sample = study_sessions[0]
+            course = CourseManager.get_course(sample["course_id"])
+            print(f"  Example: {course['name']} on {sample['day']} at {sample['time_slot']}")
     
     print("\n" + "="*50)
     print("ALL TESTS COMPLETED!")
     print("="*50)
     print("\nCheck your data.json file to see the results.")
+
+   

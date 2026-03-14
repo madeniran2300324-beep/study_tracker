@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-from tracker import CourseManager, StudyLogger, AnalyticsEngine
+from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerator
 
 class StudyTrackerApp:
     """Main application window"""
@@ -47,6 +47,7 @@ class StudyTrackerApp:
         buttons = [
             ("📚 Courses", self.show_courses),
             ("⏱️ Log Study Time", self.log_study_time),
+            ("📅 Weekly Schedule", self.show_schedule_view),
             ("📊 View Statistics", self.show_statistics),
             ("🎯 Exam Prep", self.show_exam_prep),
         ]
@@ -382,6 +383,101 @@ class StudyTrackerApp:
             font=("Arial", 12)
         ).pack(pady=50)
 
+    def show_schedule_view(self):
+        """Display and manage weekly schedule"""
+        # Clear content area
+        for widget in self.content_area.winfo_children():
+            widget.destroy()
+        
+        # Header
+        header = ttk.Label(
+            self.content_area,
+            text="Weekly Study Schedule",
+            font=("Arial", 20, "bold")
+        )
+        header.pack(pady=20)
+        
+        # Generate button
+        def generate_schedule():
+            success = ScheduleGenerator.regenerate_full_schedule(20)
+            if success:
+                messagebox.showinfo("Success", "Schedule generated!")
+                self.refresh_data()
+                self.show_schedule_view()  # Refresh to show new schedule
+        
+        generate_btn = ttk.Button(
+            self.content_area,
+            text="🔄 Generate New Schedule (20 hours/week)",
+            command=generate_schedule
+        )
+        generate_btn.pack(pady=10)
+        
+        # Display current schedule
+        self.display_schedule_grid()
+
+    def display_schedule_grid(self):
+        """Show the weekly schedule in a grid"""
+        from tracker import load_data, CourseManager
+        
+        data = load_data()
+        schedule = data.get("weekly_schedule", [])
+        
+        if not schedule:
+            ttk.Label(
+                self.content_area,
+                text="No schedule yet. Click 'Generate New Schedule' above.",
+                font=("Arial", 12)
+            ).pack(pady=50)
+            return
+        
+        # Create a frame for the schedule
+        schedule_frame = ttk.Frame(self.content_area)
+        schedule_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Add scrollbar if needed
+        canvas = tk.Canvas(schedule_frame)
+        scrollbar = ttk.Scrollbar(schedule_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Group by day
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        
+        for day in days:
+            day_entries = [s for s in schedule if s["day"] == day]
+            
+            if day_entries:
+                # Day header
+                day_label = ttk.Label(
+                    scrollable_frame,
+                    text=day,
+                    font=("Arial", 14, "bold")
+                )
+                day_label.pack(anchor=tk.W, pady=(10, 5))
+                
+                # Entries for this day
+                for entry in sorted(day_entries, key=lambda x: x["time_slot"]):
+                    course = CourseManager.get_course(entry["course_id"])
+                    entry_type = "📚 Study" if entry["type"] == "study" else "🎓 Class"
+                    
+                    entry_text = f"  {entry['time_slot']:15} - {course['name']} ({entry_type})"
+                    
+                    entry_label = ttk.Label(
+                        scrollable_frame,
+                        text=entry_text,
+                        font=("Arial", 11)
+                    )
+                    entry_label.pack(anchor=tk.W, padx=20)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
 # ============================================
 # RUN THE APP
