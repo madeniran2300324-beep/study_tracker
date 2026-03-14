@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox
 from datetime import datetime
 
 from matplotlib import colors
-from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerator
+from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerator, load_data
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -54,6 +54,7 @@ class StudyTrackerApp:
             ("📚 Courses", self.show_courses),
             ("⏱️ Log Study Time", self.log_study_time),
             ("📅 Weekly Schedule", self.show_schedule_view),
+            ("📆 Calendar View", self.show_calendar_view),
             ("📊 View Statistics", self.show_statistics),
             ("🎯 Exam Prep", self.show_exam_prep),
         ]
@@ -89,6 +90,23 @@ class StudyTrackerApp:
         self.courses = CourseManager.list_courses()
         print(f"Loaded {len(self.courses)} course(s)")
     
+    def lighten_color(self, hex_color):
+        """Convert a hex color to a lighter shade for study blocks"""
+        # Remove the # if present
+        hex_color = hex_color.lstrip('#')
+        
+        # Convert hex to RGB
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        
+        # Lighten by mixing with white (increase each channel by 40%)
+        r = min(255, int(r + (255 - r) * 0.6))
+        g = min(255, int(g + (255 - g) * 0.6))
+        b = min(255, int(b + (255 - b) * 0.6))
+        
+        # Convert back to hex
+        return f'#{r:02x}{g:02x}{b:02x}'
     # ============================================
     # NAVIGATION HANDLERS
     # ============================================
@@ -491,25 +509,152 @@ class StudyTrackerApp:
         canvas = FigureCanvasTkAgg(fig, master=parent)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
+
     def show_exam_prep(self):
-        """Show exam preparation view"""
+        """Show exam preparation view with priorities"""
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
         
         header = ttk.Label(
             self.content_area,
-            text="Exam Preparation",
+            text="Exam Preparation Planner",
             font=("Arial", 20, "bold")
         )
         header.pack(pady=20)
         
+        # Check if we have courses
+        if not self.courses:
+            ttk.Label(
+                self.content_area,
+                text="Add courses first to see exam preparation recommendations!",
+                font=("Arial", 12)
+            ).pack(pady=50)
+            return
+        
+        # Update confidence levels
+        AnalyticsEngine.update_all_confidence_levels()
+        self.refresh_data()
+        
+        # Get confidence data
+        data = load_data()
+        confidence_data = data.get("exam_confidence", [])
+        
+        if not confidence_data:
+            ttk.Label(
+                self.content_area,
+                text="Log some study sessions first to generate confidence levels!",
+                font=("Arial", 12)
+            ).pack(pady=50)
+            return
+        
+        # Info section
+        info_frame = ttk.LabelFrame(self.content_area, text="How This Works", padding=15)
+        info_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        info_text = """Confidence levels are automatically calculated based on:
+        • Hours studied (40% weight)
+        • Study consistency - how regularly you study (40% weight)  
+        • Recency - have you studied recently? (20% weight)
+        
+        Courses with LOW confidence need MORE exam prep time!"""
+        
         ttk.Label(
-            self.content_area,
-            text="Exam prep features coming in Week 4!",
-            font=("Arial", 12)
-        ).pack(pady=50)
+            info_frame,
+            text=info_text,
+            font=("Arial", 10),
+            justify=tk.LEFT
+        ).pack(anchor=tk.W)
+        
+        # Priority recommendations
+        priority_frame = ttk.LabelFrame(self.content_area, text="Exam Priority Recommendations", padding=15)
+        priority_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Create priority list
+        priorities = []
+        for conf in confidence_data:
+            course = CourseManager.get_course(conf["course_id"])
+            if course:
+                # Priority score = units × (6 - confidence) 
+                # Higher score = needs more attention
+                priority_score = course["units"] * (6 - conf["confidence_level"])
+                
+                priorities.append({
+                    "course": course,
+                    "confidence": conf["confidence_level"],
+                    "priority_score": priority_score,
+                    "hours": AnalyticsEngine.get_hours_by_course(course["id"])
+                })
+        
+        # Sort by priority (highest first)
+        priorities.sort(key=lambda x: x["priority_score"], reverse=True)
+        
+        # Display priorities
+        for i, item in enumerate(priorities):
+            rank = i + 1
+            course = item["course"]
+            confidence = item["confidence"]
+            hours = item["hours"]
+            
+            # Determine priority level
+            if rank == 1:
+                priority_label = "🔴 HIGHEST PRIORITY"
+                bg_color = "#ffebee"
+            elif rank <= 3:
+                priority_label = "🟡 High Priority"
+                bg_color = "#fff9c4"
+            else:
+                priority_label = "🟢 Lower Priority"
+                bg_color = "#e8f5e9"
+            
+            # Create card for each course
+            card = tk.Frame(priority_frame, relief=tk.RAISED, borderwidth=2, bg=bg_color)
+            card.pack(fill=tk.X, pady=8, padx=5)
+            
+            # Rank and priority
+            rank_label = tk.Label(
+                card,
+                text=f"#{rank}  {priority_label}",
+                font=("Arial", 12, "bold"),
+                bg=bg_color
+            )
+            rank_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
+            
+            # Course name
+            course_label = tk.Label(
+                card,
+                text=course["name"],
+                font=("Arial", 14, "bold"),
+                bg=bg_color
+            )
+            course_label.pack(anchor=tk.W, padx=10)
+            
+            # Stats
+            stats_text = f"Confidence: {confidence:.1f}/5.0  |  Study Time: {hours:.1f}h  |  Units: {course['units']}"
+            stats_label = tk.Label(
+                card,
+                text=stats_text,
+                font=("Arial", 10),
+                bg=bg_color
+            )
+            stats_label.pack(anchor=tk.W, padx=10, pady=(5, 10))
+            
+            # Recommendation
+            if confidence < 2.5:
+                recommendation = "⚠️ Urgent: Schedule intensive review sessions"
+            elif confidence < 3.5:
+                recommendation = "📝 Recommended: Add more practice problems and review"
+            else:
+                recommendation = "✓ On track: Maintain current study pace"
+            
+            rec_label = tk.Label(
+                card,
+                text=recommendation,
+                font=("Arial", 10, "italic"),
+                bg=bg_color,
+                fg="#1976d2"
+            )
+            rec_label.pack(anchor=tk.W, padx=10, pady=(0, 10))
 
     def show_schedule_view(self):
         """Display and manage weekly schedule"""
@@ -606,6 +751,170 @@ class StudyTrackerApp:
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+    def show_calendar_view(self):
+        """Display visual calendar grid"""
+        from tracker import load_data, CourseManager
+        
+        # Clear content area
+        for widget in self.content_area.winfo_children():
+            widget.destroy()
+        
+        # Header
+        header = ttk.Label(
+            self.content_area,
+            text="Weekly Calendar View",
+            font=("Arial", 20, "bold")
+        )
+        header.pack(pady=20)
+        
+        # Load schedule data
+        data = load_data()
+        schedule = data.get("weekly_schedule", [])
+        
+        if not schedule:
+            ttk.Label(
+                self.content_area,
+                text="No schedule generated yet. Go to 'Weekly Schedule' and click 'Generate New Schedule'.",
+                font=("Arial", 12)
+            ).pack(pady=50)
+            return
+        
+        # Create scrollable frame for calendar
+        calendar_container = ttk.Frame(self.content_area)
+        calendar_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        canvas = tk.Canvas(calendar_container, bg='white')
+        scrollbar_y = ttk.Scrollbar(calendar_container, orient="vertical", command=canvas.yview)
+        scrollbar_x = ttk.Scrollbar(calendar_container, orient="horizontal", command=canvas.xview)
+        
+        calendar_frame = ttk.Frame(canvas)
+        
+        calendar_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=calendar_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
+        
+        # Build the calendar grid
+        self.build_calendar_grid(calendar_frame, schedule)
+        
+        # Pack scrollbars and canvas
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar_y.grid(row=0, column=1, sticky="ns")
+        scrollbar_x.grid(row=1, column=0, sticky="ew")
+        
+        calendar_container.grid_rowconfigure(0, weight=1)
+        calendar_container.grid_columnconfigure(0, weight=1)
+
+    def build_calendar_grid(self, parent, schedule):
+        """Create the actual calendar grid with time slots and events"""
+        from tracker import CourseManager
+        
+        # Days of the week
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        
+        # Time slots (8 AM to 10 PM)
+        time_slots = []
+        for hour in range(8, 22):
+            time_slots.append(f"{hour:02d}:00")
+        
+        # Header row - Days
+        tk.Label(
+            parent,
+            text="Time",
+            font=("Arial", 10, "bold"),
+            bg="#E8EAF6",
+            relief=tk.RIDGE,
+            width=8,
+            height=2
+        ).grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        
+        for col, day in enumerate(days, start=1):
+            tk.Label(
+                parent,
+                text=day,
+                font=("Arial", 11, "bold"),
+                bg="#3F51B5",
+                fg="white",
+                relief=tk.RIDGE,
+                height=2
+            ).grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+        
+        # Create grid cells
+        self.calendar_cells = {}  # Store cell references
+        
+        for row, time_slot in enumerate(time_slots, start=1):
+            # Time label (left column)
+            tk.Label(
+                parent,
+                text=time_slot,
+                font=("Arial", 9),
+                bg="#E8EAF6",
+                relief=tk.RIDGE,
+                width=8
+            ).grid(row=row, column=0, sticky="nsew", padx=1, pady=1)
+            
+            # Day cells
+            for col, day in enumerate(days, start=1):
+                cell = tk.Frame(
+                    parent,
+                    bg="white",
+                    relief=tk.RIDGE,
+                    borderwidth=1,
+                    width=120,
+                    height=60
+                )
+                cell.grid(row=row, column=col, sticky="nsew", padx=1, pady=1)
+                cell.grid_propagate(False)  # Maintain fixed size
+                
+                # Store cell reference
+                self.calendar_cells[(day, time_slot)] = cell
+        
+        # Populate cells with schedule events
+        for entry in schedule:
+            day = entry["day"]
+            time_range = entry["time_slot"]
+            course_id = entry["course_id"]
+            entry_type = entry["type"]
+            
+            # Parse time slot (e.g., "14:00-16:00")
+            start_time, end_time = time_range.split("-")
+            start_hour = start_time.split(":")[0]
+            
+            # Get course details
+            course = CourseManager.get_course(course_id)
+            if not course:
+                continue
+            
+            # Determine color
+            if entry_type == "class":
+                bg_color = course.get("color", "#4CAF50")
+                label_text = f"🎓 {course['name']}\n{time_range}"
+            else:  # study
+                bg_color = self.lighten_color(course.get("color", "#4CAF50"))
+                label_text = f"📚 {course['name']}\n{time_range}"
+            
+            # Find the cell and add the event
+            cell_key = (day, f"{start_hour}:00")
+            if cell_key in self.calendar_cells:
+                cell = self.calendar_cells[cell_key]
+                
+                # Create event label
+                event_label = tk.Label(
+                    cell,
+                    text=label_text,
+                    bg=bg_color,
+                    fg="white" if entry_type == "class" else "black",
+                    font=("Arial", 9, "bold"),
+                    wraplength=110,
+                    justify=tk.CENTER,
+                    relief=tk.RAISED,
+                    borderwidth=2
+                )
+                event_label.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
 # ============================================
 # RUN THE APP

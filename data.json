@@ -193,16 +193,16 @@
     {
       "course_id": "course_1",
       "confidence_level": 2.36,
-      "updated_at": "2026-03-14T11:21:01.359681"
+      "updated_at": "2026-03-14T12:36:14.180797"
     },
     {
       "course_id": "course_2",
       "confidence_level": 2.03,
-      "updated_at": "2026-03-14T11:21:01.362220"
+      "updated_at": "2026-03-14T12:36:14.182208"
     }
   ],
   "metadata": {
     "version": "1.0",
-    "last_updated": "2026-03-14T11:21:01.379855"
+    "last_updated": "2026-03-14T12:36:14.182270"
   }
 }
