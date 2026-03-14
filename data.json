@@ -37,6 +37,14 @@
       ],
       "color": "#2196F3",
       "created_at": "2026-03-14T06:07:15.776473"
+    },
+    {
+      "id": "course_3",
+      "name": "Electric Circuit Theory 1",
+      "units": 2,
+      "schedule": [],
+      "color": "#4CAF50",
+      "created_at": "2026-03-14T06:32:48.017849"
     }
   ],
   "study_sessions": [
@@ -87,6 +95,14 @@
       "duration_minutes": 120,
       "notes": "BST implementation",
       "created_at": "2026-03-14T06:07:15.812195"
+    },
+    {
+      "id": "session_7",
+      "course_id": "course_3",
+      "date": "2026-03-14",
+      "duration_minutes": 78,
+      "notes": "Reviwed RC and RL circut questions",
+      "created_at": "2026-03-14T06:33:22.275683"
     }
   ],
   "weekly_schedule": [],
@@ -104,6 +120,6 @@
   ],
   "metadata": {
     "version": "1.0",
-    "last_updated": "2026-03-14T06:07:15.835838"
+    "last_updated": "2026-03-14T06:33:22.275773"
   }
 }
