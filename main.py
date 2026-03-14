@@ -1,7 +1,13 @@
+from email import header
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
+
+from matplotlib import colors
 from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerator
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
 class StudyTrackerApp:
     """Main application window"""
@@ -301,69 +307,191 @@ class StudyTrackerApp:
         save_btn.grid(row=4, column=0, columnspan=2, pady=20)
     
     def show_statistics(self):
-        """Show statistics view"""
+        """Show statistics view with charts"""
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
-        
+    
         header = ttk.Label(
             self.content_area,
             text="Study Statistics",
             font=("Arial", 20, "bold")
         )
         header.pack(pady=20)
-        
-        # Total hours
-        total = AnalyticsEngine.get_total_study_hours()
-        ttk.Label(
-            self.content_area,
-            text=f"Total Study Time: {total} hours",
-            font=("Arial", 16, "bold")
-        ).pack(pady=20)
-        
-        # Course breakdown
-        if self.courses:
+    
+        # Check if we have data
+        if not self.courses:
             ttk.Label(
                 self.content_area,
-                text="By Course:",
-                font=("Arial", 14, "bold")
-            ).pack(pady=(20, 10))
-            
-            # Create a frame for course stats
-            stats_frame = ttk.Frame(self.content_area)
-            stats_frame.pack(fill=tk.BOTH, expand=True, padx=40)
-            
-            for course in self.courses:
-                summary = AnalyticsEngine.get_course_summary(course['id'])
-                
-                # Course stat card
-                card = ttk.Frame(stats_frame, relief=tk.GROOVE, borderwidth=2)
-                card.pack(fill=tk.X, pady=10, padx=10)
-                
-                ttk.Label(
-                    card,
-                    text=summary['name'],
-                    font=("Arial", 12, "bold")
-                ).pack(anchor=tk.W, padx=10, pady=(10, 5))
-                
-                ttk.Label(
-                    card,
-                    text=f"Study Time: {summary['total_hours']} hours | Sessions: {summary['total_sessions']}",
-                    font=("Arial", 10)
-                ).pack(anchor=tk.W, padx=10)
-                
-                ttk.Label(
-                    card,
-                    text=f"Consistency: {summary['consistency']}% | Confidence: {summary['confidence_level']}/5.0",
-                    font=("Arial", 10)
-                ).pack(anchor=tk.W, padx=10, pady=(0, 10))
-        else:
-            ttk.Label(
-                self.content_area,
-                text="No courses yet!",
+                text="No courses yet. Add courses to see statistics!",
                 font=("Arial", 12)
             ).pack(pady=50)
+            return
     
+        # Get study data
+        course_names = []
+        study_hours = []
+        colors = []
+    
+        for course in self.courses:
+            hours = AnalyticsEngine.get_hours_by_course(course['id'])
+            if hours > 0:  # Only show courses with study time
+                course_names.append(course['name'])
+                study_hours.append(hours)
+                colors.append(course.get('color', '#4CAF50'))
+    
+        if not study_hours:
+            ttk.Label(
+                self.content_area,
+                text="No study sessions logged yet. Start logging your study time!",
+                font=("Arial", 12)
+            ).pack(pady=50)
+            return
+    
+        # Total hours display
+        total = sum(study_hours)
+        total_label = ttk.Label(
+            self.content_area,
+            text=f"Total Study Time: {total:.1f} hours",
+            font=("Arial", 16, "bold")
+        )
+        total_label.pack(pady=10)
+    
+        # Chart type selector
+        chart_frame = ttk.Frame(self.content_area)
+        chart_frame.pack(pady=10)
+    
+        chart_type = tk.StringVar(value="bar")
+    
+        def update_chart():
+        # Remove old chart
+            for widget in chart_container.winfo_children():
+                widget.destroy()
+        
+            if chart_type.get() == "bar":
+                self.create_bar_chart(chart_container, course_names, study_hours, colors)
+            else:
+                self.create_pie_chart(chart_container, course_names, study_hours, colors)
+    
+        ttk.Label(chart_frame, text="Chart Type:", font=("Arial", 11)).pack(side=tk.LEFT, padx=5)
+    
+        bar_radio = ttk.Radiobutton(
+            chart_frame,
+            text="Bar Chart",
+            variable=chart_type,
+            value="bar",
+            command=update_chart
+        )
+        bar_radio.pack(side=tk.LEFT, padx=5)
+    
+        pie_radio = ttk.Radiobutton(
+            chart_frame,
+            text="Pie Chart",
+            variable=chart_type,
+            value="pie",
+            command=update_chart
+        )
+        pie_radio.pack(side=tk.LEFT, padx=5)
+    
+        # Chart container
+        chart_container = ttk.Frame(self.content_area)
+        chart_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    
+        # Show initial chart
+        self.create_bar_chart(chart_container, course_names, study_hours, colors)
+    
+        # Detailed breakdown
+        details_frame = ttk.LabelFrame(self.content_area, text="Detailed Breakdown", padding=10)
+        details_frame.pack(fill=tk.X, padx=20, pady=10)
+    
+        for i, course in enumerate(self.courses):
+            hours = AnalyticsEngine.get_hours_by_course(course['id'])
+            confidence = AnalyticsEngine.calculate_confidence_level(course['id'])
+        
+            if hours > 0:
+                percentage = (hours / total) * 100
+                detail_text = f"{course['name']}: {hours:.1f}h ({percentage:.1f}%) | Confidence: {confidence:.1f}/5.0"
+            else:
+                detail_text = f"{course['name']}: No study time logged yet"
+        
+            detail_label = ttk.Label(
+                details_frame,
+                text=detail_text,
+                font=("Arial", 10)
+            )
+            detail_label.pack(anchor=tk.W, pady=2)
+
+    def create_bar_chart(self, parent, course_names, study_hours, colors):
+        """Create a bar chart of study hours"""
+        # Create figure
+        fig = Figure(figsize=(8, 5), dpi=100)
+        ax = fig.add_subplot(111)
+    
+        # Create bars
+        bars = ax.bar(course_names, study_hours, color=colors, alpha=0.7, edgecolor='black', linewidth=1.5)
+    
+        # Customize chart
+        ax.set_xlabel('Course', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Hours Studied', fontsize=12, fontweight='bold')
+        ax.set_title('Study Time by Course', fontsize=14, fontweight='bold', pad=20)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width()/2., 
+                height,
+                f'{height:.1f}h',
+                ha='center', 
+                va='bottom',
+                fontweight='bold'
+            )
+    
+        # Rotate x-axis labels if many courses
+        if len(course_names) > 3:
+            ax.set_xticklabels(course_names, rotation=45, ha='right')
+    
+        fig.tight_layout()
+    
+        # Embed in tkinter
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def create_pie_chart(self, parent, course_names, study_hours, colors):
+        """Create a pie chart of study time distribution"""
+        # Create figure
+        fig = Figure(figsize=(8, 5), dpi=100)
+        ax = fig.add_subplot(111)
+    
+        # Create pie chart
+        wedges, texts, autotexts = ax.pie(
+            study_hours,
+            labels=course_names,
+            colors=colors,
+            autopct='%1.1f%%',
+            startangle=90,
+            textprops={'fontsize': 11, 'fontweight': 'bold'}
+        )
+    
+        # Make percentage text white for better visibility
+        for autotext in autotexts:
+            autotext.set_color('white')
+            autotext.set_fontweight('bold')
+    
+        ax.set_title('Study Time Distribution', fontsize=14, fontweight='bold', pad=20)
+    
+        # Equal aspect ratio ensures circular pie
+        ax.axis('equal')
+    
+        fig.tight_layout()
+    
+        # Embed in tkinter
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
     def show_exam_prep(self):
         """Show exam preparation view"""
         # Clear content area
