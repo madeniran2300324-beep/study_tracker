@@ -1,4 +1,5 @@
 from email import header
+from posixpath import sep
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
@@ -8,6 +9,7 @@ from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerat
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from styles import Colors, Fonts, ModernButton, Card, SectionHeader, Icons, configure_styles
 
 class StudyTrackerApp:
     """Main application window"""
@@ -17,6 +19,10 @@ class StudyTrackerApp:
         self.root.title("Study Tracker")
         self.root.geometry("1200x800")
         
+        #Configure modern styles
+        configure_styles()
+        self.root.configure(bg=Colors.BG_PRIMARY)
+
         # Set up the main layout
         self.setup_ui()
         
@@ -40,33 +46,53 @@ class StudyTrackerApp:
         self.create_content_area()
     
     def create_sidebar(self):
-        """Create navigation sidebar"""
-        # Title
-        title = ttk.Label(
-            self.sidebar, 
-            text="Study Tracker",
-            font=("Arial", 16, "bold")
+        """Create modern navigation sidebar"""
+        # Sidebar frame with custom color
+        self.sidebar.configure(style="Sidebar.TFrame")
+    
+        # App title with icon
+        title_frame = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
+        title_frame.pack(pady=30)
+    
+        icon_label = tk.Label(
+            title_frame,
+            text="📚",
+            font=("Segoe UI", 32),
+            bg=Colors.BG_SIDEBAR
         )
-        title.pack(pady=20)
-        
-        # Navigation buttons
+        icon_label.pack()
+    
+        title = tk.Label(
+            title_frame,
+            text="Study Tracker",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SIDEBAR,
+            fg=Colors.PRIMARY
+        )
+        title.pack(pady=(10, 0))
+    
+        # Separator
+        sep = ttk.Separator(self.sidebar, orient='horizontal')
+        sep.pack(fill=tk.X, padx=20, pady=20)
+    
+        # Navigation buttons with icons
         buttons = [
-            ("📚 Courses", self.show_courses),
-            ("⏱️ Log Study Time", self.log_study_time),
-            ("📅 Weekly Schedule", self.show_schedule_view),
-            ("📆 Calendar View", self.show_calendar_view),
-            ("📊 View Statistics", self.show_statistics),
-            ("🎯 Exam Prep", self.show_exam_prep),
+            (f"{Icons.COURSES}  Courses", self.show_courses),
+            (f"{Icons.LOG}  Log Study Time", self.log_study_time),
+            (f"{Icons.SCHEDULE}  Weekly Schedule", self.show_schedule_view),
+            (f"{Icons.STATS}  Statistics", self.show_statistics),
+            (f"{Icons.EXAM}  Exam Prep", self.show_exam_prep),
         ]
-        
+    
         for text, command in buttons:
             btn = ttk.Button(
                 self.sidebar,
                 text=text,
                 command=command,
-                width=20
+                style="Sidebar.TButton",
+                width=22
             )
-            btn.pack(pady=5, padx=10)
+            btn.pack(pady=5, padx=15, ipady=5)
     
     def create_content_area(self):
         """Create main content area"""
@@ -107,6 +133,7 @@ class StudyTrackerApp:
         
         # Convert back to hex
         return f'#{r:02x}{g:02x}{b:02x}'
+    
     # ============================================
     # NAVIGATION HANDLERS
     # ============================================
@@ -116,22 +143,32 @@ class StudyTrackerApp:
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
-        
-        # Header
-        header = ttk.Label(
-            self.content_area,
-            text="My Courses",
-            font=("Arial", 20, "bold")
+    
+        # Set background color
+        self.content_area.configure(bg=Colors.BG_SECONDARY)
+    
+        # Header with icon
+        header_frame = tk.Frame(self.content_area, bg=Colors.BG_SECONDARY)
+        header_frame.pack(pady=30)
+    
+        header = tk.Label(
+            header_frame,
+            text=f"{Icons.COURSES} My Courses",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.PRIMARY
         )
-        header.pack(pady=20)
-        
-        # Add course button
-        add_btn = ttk.Button(
+        header.pack()
+    
+        # Modern add button
+        add_btn = ModernButton(
             self.content_area,
-            text="+ Add New Course",
-            command=self.add_course_dialog
+            text=f"{Icons.ADD} Add New Course",
+            command=self.add_course_dialog,
+            style="primary"
         )
-        add_btn.pack(pady=10)
+        add_btn.pack(pady=15)
+      
         
         # Course list
         if not self.courses:
@@ -150,34 +187,90 @@ class StudyTrackerApp:
                 self.create_course_card(courses_frame, course)
     
     def create_course_card(self, parent, course):
-        """Create a card display for a course"""
-        card = ttk.Frame(parent, relief=tk.RAISED, borderwidth=2)
-        card.pack(fill=tk.X, pady=10, padx=10)
-        
+        """Create a beautiful course card"""
+        # Use Card widget for shadow effect
+        card = Card(parent)
+        card.pack(fill=tk.X, pady=12, padx=15)
+    
+        # Color strip on the left
+        color_strip = tk.Frame(
+            card,
+            bg=course.get('color', Colors.PRIMARY),
+            width=6
+        )
+        color_strip.pack(side=tk.LEFT, fill=tk.Y)
+    
+        # Content area
+        content = tk.Frame(card, bg=Colors.WHITE)
+        content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=15, pady=15)
+    
         # Course name
-        name = ttk.Label(
-            card,
+        name_label = tk.Label(
+            content,
             text=course['name'],
-            font=("Arial", 14, "bold")
+            font=Fonts.HEADING_2,
+            bg=Colors.WHITE,
+            fg=Colors.TEXT_PRIMARY,
+            anchor=tk.W
         )
-        name.pack(anchor=tk.W, padx=10, pady=(10, 5))
-        
+        name_label.pack(anchor=tk.W)
+    
         # Course details
-        details = ttk.Label(
-            card,
-            text=f"Units: {course['units']} | Sessions: {len(course['schedule'])}",
-            font=("Arial", 10)
+        units_text = f"{Icons.STAR} {course['units']} Units"
+        sessions_text = f"{Icons.CALENDAR} {len(course.get('schedule', []))} Class Sessions"
+    
+        details_label = tk.Label(
+            content,
+            text=f"{units_text}  •  {sessions_text}",
+            font=Fonts.BODY,
+            bg=Colors.WHITE,
+            fg=Colors.TEXT_SECONDARY,
+            anchor=tk.W
         )
-        details.pack(anchor=tk.W, padx=10)
-        
-        # Study hours
+        details_label.pack(anchor=tk.W, pady=(5, 10))
+    
+        # Study stats
         hours = AnalyticsEngine.get_hours_by_course(course['id'])
-        hours_label = ttk.Label(
-            card,
-            text=f"Total Study Time: {hours} hours",
-            font=("Arial", 10)
+        confidence = AnalyticsEngine.calculate_confidence_level(course['id'])
+    
+        stats_frame = tk.Frame(content, bg=Colors.WHITE)
+        stats_frame.pack(fill=tk.X)
+    
+        # Hours badge
+        hours_badge = tk.Frame(stats_frame, bg=Colors.PRIMARY_LIGHT, padx=12, pady=6)
+        hours_badge.pack(side=tk.LEFT, padx=(0, 10))
+    
+        hours_label = tk.Label(
+            hours_badge,
+            text=f"{hours:.1f}h studied",
+            font=Fonts.BODY_BOLD,
+            bg=Colors.PRIMARY_LIGHT,
+            fg=Colors.WHITE
         )
-        hours_label.pack(anchor=tk.W, padx=10, pady=(5, 10))
+        hours_label.pack()
+    
+        # Confidence badge
+        if confidence >= 4.0:
+            conf_color = Colors.SECONDARY
+            conf_icon = Icons.PRIORITY_LOW
+        elif confidence >= 2.5:
+            conf_color = Colors.WARNING
+            conf_icon = Icons.PRIORITY_MED
+        else:
+            conf_color = Colors.DANGER
+            conf_icon = Icons.PRIORITY_HIGH
+    
+        conf_badge = tk.Frame(stats_frame, bg=conf_color, padx=12, pady=6)
+        conf_badge.pack(side=tk.LEFT)
+    
+        conf_label = tk.Label(
+            conf_badge,
+            text=f"{conf_icon} {confidence:.1f}/5.0",
+            font=Fonts.BODY_BOLD,
+            bg=conf_color,
+            fg=Colors.WHITE
+        )
+        conf_label.pack()
     
     def add_course_dialog(self):
         """Show dialog to add a new course"""
@@ -228,13 +321,22 @@ class StudyTrackerApp:
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
-        
-        header = ttk.Label(
-            self.content_area,
-            text="Log Study Time",
-            font=("Arial", 20, "bold")
+    
+        # Set background color
+        self.content_area.configure(bg=Colors.BG_SECONDARY)
+    
+        # Header with icon
+        header_frame = tk.Frame(self.content_area, bg=Colors.BG_SECONDARY)
+        header_frame.pack(pady=30)
+    
+        header = tk.Label(
+            header_frame,
+            text=f"{Icons.LOG} Log Study Time",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.PRIMARY
         )
-        header.pack(pady=20)
+        header.pack()
         
         if not self.courses:
             ttk.Label(
@@ -330,12 +432,21 @@ class StudyTrackerApp:
         for widget in self.content_area.winfo_children():
             widget.destroy()
     
-        header = ttk.Label(
-            self.content_area,
-            text="Study Statistics",
-            font=("Arial", 20, "bold")
+        # Set background color
+        self.content_area.configure(bg=Colors.BG_SECONDARY)
+    
+        # Header with icon
+        header_frame = tk.Frame(self.content_area, bg=Colors.BG_SECONDARY)
+        header_frame.pack(pady=30)
+    
+        header = tk.Label(
+            header_frame,
+            text=f"{Icons.STATS} Study Statistics",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.PRIMARY
         )
-        header.pack(pady=20)
+        header.pack()
     
         # Check if we have data
         if not self.courses:
@@ -515,13 +626,22 @@ class StudyTrackerApp:
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
-        
-        header = ttk.Label(
-            self.content_area,
-            text="Exam Preparation Planner",
-            font=("Arial", 20, "bold")
+    
+        # Set background color
+        self.content_area.configure(bg=Colors.BG_SECONDARY)
+    
+        # Header with icon
+        header_frame = tk.Frame(self.content_area, bg=Colors.BG_SECONDARY)
+        header_frame.pack(pady=30)
+    
+        header = tk.Label(
+            header_frame,
+            text=f"{Icons.EXAM} Exam Preparation Planner",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.PRIMARY
         )
-        header.pack(pady=20)
+        header.pack()
         
         # Check if we have courses
         if not self.courses:
@@ -661,32 +781,38 @@ class StudyTrackerApp:
         # Clear content area
         for widget in self.content_area.winfo_children():
             widget.destroy()
-        
-        # Header
-        header = ttk.Label(
-            self.content_area,
-            text="Weekly Study Schedule",
-            font=("Arial", 20, "bold")
+    
+        # Set background color
+        self.content_area.configure(bg=Colors.BG_SECONDARY)
+    
+        # Header with icon
+        header_frame = tk.Frame(self.content_area, bg=Colors.BG_SECONDARY)
+        header_frame.pack(pady=30)
+    
+        header = tk.Label(
+            header_frame,
+            text=f"{Icons.SCHEDULE} Weekly Study Schedule",
+            font=Fonts.TITLE,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.PRIMARY
         )
-        header.pack(pady=20)
-        
-        # Generate button
+        header.pack()
+    
+        # Generate button (modern style)
         def generate_schedule():
             success = ScheduleGenerator.regenerate_full_schedule(20)
             if success:
                 messagebox.showinfo("Success", "Schedule generated!")
                 self.refresh_data()
-                self.show_schedule_view()  # Refresh to show new schedule
-        
-        generate_btn = ttk.Button(
+                self.show_schedule_view()
+    
+        generate_btn = ModernButton(
             self.content_area,
-            text="🔄 Generate New Schedule (20 hours/week)",
-            command=generate_schedule
+            text=f"{Icons.REFRESH} Generate New Schedule (20 hours/week)",
+            command=generate_schedule,
+            style="success"
         )
-        generate_btn.pack(pady=10)
-        
-        # Display current schedule
-        self.display_schedule_grid()
+        generate_btn.pack(pady=15)
 
     def display_schedule_grid(self):
         """Show the weekly schedule in a grid"""
