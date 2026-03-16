@@ -1,10 +1,12 @@
-from email import header
-from posixpath import sep
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
+from tkinter import dialog
+from unicodedata import name
 
-from matplotlib import colors
+from matplotlib import colors, units
+from pyparsing import col
+from pyparsing import col
 from tracker import CourseManager, StudyLogger, AnalyticsEngine, ScheduleGenerator, load_data
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -34,14 +36,14 @@ class StudyTrackerApp:
         # Main container
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
+    
         # Left sidebar (navigation)
-        self.sidebar = ttk.Frame(main_frame, width=200)
+        self.sidebar = ttk.Frame(main_frame, width=200, style="Sidebar.TFrame")
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         self.create_sidebar()
-        
-        # Right content area (calendar/views)
-        self.content_area = ttk.Frame(main_frame)
+    
+        # Right content area (calendar/views) - CHANGED TO tk.Frame
+        self.content_area = tk.Frame(main_frame, bg=Colors.BG_SECONDARY)  # ← FIXED
         self.content_area.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         self.create_content_area()
     
@@ -172,19 +174,34 @@ class StudyTrackerApp:
         
         # Course list
         if not self.courses:
-            no_courses = ttk.Label(
+            no_courses = tk.Label(
                 self.content_area,
                 text="No courses yet. Click 'Add New Course' to get started!",
-                font=("Arial", 12)
+                font=Fonts.BODY,
+                bg=Colors.BG_SECONDARY,
+                fg=Colors.TEXT_SECONDARY
             )
             no_courses.pack(pady=50)
         else:
-            # Create a frame for course cards
-            courses_frame = ttk.Frame(self.content_area)
-            courses_frame.pack(fill=tk.BOTH, expand=True, padx=20)
-            
+            # Create a scrollable frame for course cards
+            canvas = tk.Canvas(self.content_area, bg=Colors.BG_SECONDARY, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(self.content_area, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas, bg=Colors.BG_SECONDARY)
+        
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+        
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+        
+            # Display each course
             for course in self.courses:
-                self.create_course_card(courses_frame, course)
+                self.create_course_card(scrollable_frame, course)
+        
+            canvas.pack(side="left", fill="both", expand=True, padx=20)
+            scrollbar.pack(side="right", fill="y")
     
     def create_course_card(self, parent, course):
         """Create a beautiful course card"""
@@ -273,48 +290,234 @@ class StudyTrackerApp:
         conf_label.pack()
     
     def add_course_dialog(self):
-        """Show dialog to add a new course"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Add New Course")
-        dialog.geometry("400x300")
-        
+        """Show dialog to add a new course with color picker"""
+        course_dialog = tk.Toplevel(self.root)
+        course_dialog.title("Add New Course")
+        course_dialog.geometry("450x400")
+        course_dialog.configure(bg=Colors.BG_PRIMARY)
+    
+        # Make dialog modal
+        course_dialog.transient(self.root)
+        course_dialog.grab_set()
+    
+        # Header
+        header = tk.Label(
+            course_dialog,
+            text="Add New Course",
+            font=Fonts.HEADING_1,
+            bg=Colors.BG_PRIMARY,
+            fg=Colors.PRIMARY
+        )
+        header.pack(pady=20)
+    
+        # Form frame
+        form_frame = tk.Frame(course_dialog, bg=Colors.BG_PRIMARY)
+        form_frame.pack(fill=tk.BOTH, expand=True, padx=30)
+    
         # Course name
-        ttk.Label(dialog, text="Course Name:").pack(pady=(20, 5))
-        name_entry = ttk.Entry(dialog, width=40)
-        name_entry.pack()
-        
+        tk.Label(
+            form_frame,
+            text="Course Name:",
+            font=Fonts.BODY_BOLD,
+            bg=Colors.BG_PRIMARY,
+            fg=Colors.TEXT_PRIMARY
+        ).pack(anchor=tk.W, pady=(10, 5))
+    
+        name_entry = ttk.Entry(form_frame, width=40, font=Fonts.BODY)
+        name_entry.pack(fill=tk.X)
+        name_entry.focus()
+    
         # Units
-        ttk.Label(dialog, text="Credit Units:").pack(pady=(10, 5))
-        units_entry = ttk.Entry(dialog, width=40)
-        units_entry.pack()
+        tk.Label(
+            form_frame,
+            text="Credit Units:",
+            font=Fonts.BODY_BOLD,
+            bg=Colors.BG_PRIMARY,
+            fg=Colors.TEXT_PRIMARY
+        ).pack(anchor=tk.W, pady=(15, 5))
+    
+        units_entry = ttk.Entry(form_frame, width=40, font=Fonts.BODY)
+        units_entry.pack(fill=tk.X)
+    
+        # Color selection
+        tk.Label(
+            form_frame,
+            text="Course Color:",
+            font=Fonts.BODY_BOLD,
+            bg=Colors.BG_PRIMARY,
+            fg=Colors.TEXT_PRIMARY
+        ).pack(anchor=tk.W, pady=(15, 5))
+    
+        # Color options with preview
+        color_frame = tk.Frame(form_frame, bg=Colors.BG_PRIMARY)
+        color_frame.pack(fill=tk.X, pady=5)
+    
+        # Define color options
+        color_options = [
+            ("Blue", "#1a73e8"),
+            ("Green", "#34a853"),
+            ("Orange", "#fbbc04"),
+            ("Red", "#ea4335"),
+            ("Purple", "#9334e6"),
+            ("Teal", "#00acc1"),
+            ("Pink", "#e91e63"),
+            ("Indigo", "#3f51b5"),
+        ]
+    
+        selected_color = tk.StringVar(value="#1a73e8")  # Default blue
+    
+        # Create color selection buttons
+        colors_container = tk.Frame(color_frame, bg=Colors.BG_PRIMARY)
+        colors_container.pack()
+    
+        def create_color_button(color_name, color_code, row, col):
+            """Create a clickable color button"""
+            btn_frame = tk.Frame(colors_container, bg=Colors.BG_PRIMARY)
+            btn_frame.grid(row=row, column=col, padx=5, pady=5)
         
+            # Color preview circle
+            color_btn = tk.Button(
+                btn_frame,
+                bg=color_code,
+                width=3,
+                height=1,
+                relief=tk.RAISED,
+                borderwidth=2,
+                command=lambda: select_color(color_code, color_btn)
+            )
+            color_btn.pack()
+        
+            # Color name label
+            tk.Label(
+                btn_frame,
+                text=color_name,
+                font=Fonts.SMALL,
+                bg=Colors.BG_PRIMARY,
+                fg=Colors.TEXT_SECONDARY
+            ).pack()
+        
+            return color_btn
+    
+        # Store color buttons for selection highlighting
+        color_buttons = {}
+    
+        def select_color(color_code, clicked_btn):
+            """Handle color selection"""
+            selected_color.set(color_code)
+            # Reset all buttons
+            for btn in color_buttons.values():
+                btn.config(relief=tk.RAISED, borderwidth=2)
+            # Highlight selected
+            clicked_btn.config(relief=tk.SUNKEN, borderwidth=3)
+    
+        # Create color buttons in a grid (2 rows x 4 columns)
+        for idx, (color_name, color_code) in enumerate(color_options):
+            row = idx // 4
+            col = idx % 4
+            btn = create_color_button(color_name, color_code, row, col)
+            color_buttons[color_code] = btn
+        
+            # Pre-select first color
+            if idx == 0:
+                btn.config(relief=tk.SUNKEN, borderwidth=3)
+    
+        # Save function
         def save_course():
-            name = name_entry.get().strip()
-            units_str = units_entry.get().strip()
-            
-            if not name:
-                messagebox.showerror("Error", "Please enter a course name")
-                return
-            
+            """Save course with comprehensive error handling"""
             try:
-                units = int(units_str)
+                name = name_entry.get().strip()
+                units_str = units_entry.get().strip()
+                color = selected_color.get()
+            
+                # Validate name
+                if not name:
+                    messagebox.showerror(
+                        "Validation Error", 
+                        "Please enter a course name.\n\nCourse name cannot be empty."
+                    )
+                    name_entry.focus()
+                    return
+            
+                # Validate units
+                try:
+                    units = int(units_str)
+                except ValueError:
+                    messagebox.showerror(
+                        "Validation Error", 
+                        "Units must be a valid number.\n\nPlease enter a whole number (e.g., 3, 4, 5)."
+                    )
+                    units_entry.focus()
+                    units_entry.select_range(0, tk.END)
+                    return
+            
                 if units <= 0:
-                    raise ValueError
-            except ValueError:
-                messagebox.showerror("Error", "Units must be a positive number")
-                return
+                    messagebox.showerror(
+                        "Validation Error", 
+                        "Units must be a positive number.\n\nPlease enter 1 or more units."
+                    )
+                    units_entry.focus()
+                    units_entry.select_range(0, tk.END)
+                    return
             
-            # Add course (with empty schedule for now)
-            CourseManager.add_course(name, units, [], "#4CAF50")
-            messagebox.showinfo("Success", f"Added {name}!")
+                if units > 20:
+                    result = messagebox.askyesno(
+                        "Confirm High Unit Count", 
+                        f"{units} units seems unusually high.\n\nMost courses are 1-6 units.\n\nDo you want to continue?"
+                    )
+                    if not result:
+                        units_entry.focus()
+                        units_entry.select_range(0, tk.END)
+                        return
             
-            dialog.destroy()
-            self.refresh_data()
-            self.show_courses()
+                # Add course with selected color
+                try:
+                    course_id = CourseManager.add_course(name, units, [], color)
+                except Exception as e:
+                    messagebox.showerror("Database Error", f"Could not add course:\n\n{str(e)}")
+                    return
+
+                    messagebox.showinfo(
+                        "Success", 
+                        f"✓ Course '{name}' added successfully!"
+                        )
+                
+                    dialog.destroy()
+                    self.refresh_data()
+                    self.show_courses()
+                
+                except ValueError as ve:
+                    messagebox.showerror("Database Error", f"Could not add course:\n\n{str(ve)}")
+                except Exception as e:
+                    messagebox.showerror("Unexpected Error", f"An unexpected error occurred:\n\n{str(e)}")
         
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save course:\n\n{str(e)}")
+    
+        # Buttons frame
+        btn_frame = tk.Frame(dialog, bg=Colors.BG_PRIMARY)
+        btn_frame.pack(pady=20)
+    
         # Save button
-        save_btn = ttk.Button(dialog, text="Add Course", command=save_course)
-        save_btn.pack(pady=20)
+        save_btn = ModernButton(
+            btn_frame,
+            text=f"{Icons.SAVE} Add Course",
+            command=save_course,
+            style="primary"
+        )
+        save_btn.pack(side=tk.LEFT, padx=5)
+    
+        # Cancel button
+        cancel_btn = ModernButton(
+            btn_frame,
+            text="Cancel",
+            command=dialog.destroy,
+            style="secondary"
+        )
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+    
+        # Enter key to save
+        dialog.bind('<Return>', lambda e: save_course())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
     
     def log_study_time(self):
         """Show study time logging view"""
@@ -814,69 +1017,154 @@ class StudyTrackerApp:
         )
         generate_btn.pack(pady=15)
 
+        self.display_schedule_grid()
+
     def display_schedule_grid(self):
-        """Show the weekly schedule in a grid"""
+        """Show the weekly schedule in a visual calendar grid"""
         from tracker import load_data, CourseManager
-        
+    
         data = load_data()
         schedule = data.get("weekly_schedule", [])
-        
+    
         if not schedule:
-            ttk.Label(
+            no_schedule = tk.Label(
                 self.content_area,
                 text="No schedule yet. Click 'Generate New Schedule' above.",
-                font=("Arial", 12)
-            ).pack(pady=50)
+                font=Fonts.BODY,
+                bg=Colors.BG_SECONDARY,
+                fg=Colors.TEXT_SECONDARY
+            )
+            no_schedule.pack(pady=50)
             return
-        
-        # Create a frame for the schedule
-        schedule_frame = ttk.Frame(self.content_area)
-        schedule_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Add scrollbar if needed
-        canvas = tk.Canvas(schedule_frame)
-        scrollbar = ttk.Scrollbar(schedule_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
+    
+        # Create scrollable canvas for calendar
+        canvas = tk.Canvas(self.content_area, bg=Colors.BG_SECONDARY, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content_area, orient="vertical", command=canvas.yview)
+        calendar_frame = tk.Frame(canvas, bg=Colors.BG_SECONDARY)
+    
+        calendar_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    
+        canvas.create_window((0, 0), window=calendar_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Group by day
-        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        
-        for day in days:
-            day_entries = [s for s in schedule if s["day"] == day]
-            
-            if day_entries:
-                # Day header
-                day_label = ttk.Label(
-                    scrollable_frame,
+    
+        # Calendar grid setup
+        days = ["Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        hours = list(range(8, 22))  # 8 AM to 10 PM
+    
+        # Create header row (days of week)
+        for col, day in enumerate(days):
+            if col == 0:
+                # Time column header
+                header = tk.Label(
+                    calendar_frame,
                     text=day,
-                    font=("Arial", 14, "bold")
+                    font=Fonts.BODY_BOLD,
+                    bg=Colors.PRIMARY,
+                    fg=Colors.WHITE,
+                    width=8,
+                    height=2,
+                    relief=tk.RAISED,
+                    borderwidth=1
                 )
-                day_label.pack(anchor=tk.W, pady=(10, 5))
-                
-                # Entries for this day
-                for entry in sorted(day_entries, key=lambda x: x["time_slot"]):
-                    course = CourseManager.get_course(entry["course_id"])
-                    entry_type = "📚 Study" if entry["type"] == "study" else "🎓 Class"
-                    
-                    entry_text = f"  {entry['time_slot']:15} - {course['name']} ({entry_type})"
-                    
-                    entry_label = ttk.Label(
-                        scrollable_frame,
-                        text=entry_text,
-                        font=("Arial", 11)
-                    )
-                    entry_label.pack(anchor=tk.W, padx=20)
+            else:
+                # Day column headers
+                header = tk.Label(
+                    calendar_frame,
+                    text=day,
+                    font=Fonts.BODY_BOLD,
+                    bg=Colors.PRIMARY,
+                    fg=Colors.WHITE,
+                    width=15,
+                    height=2,
+                    relief=tk.RAISED,
+                    borderwidth=1
+                )
+            header.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+    
+        # Create time slots and schedule entries
+        for row_idx, hour in enumerate(hours):
+            # Time label (first column)
+            time_label = tk.Label(
+                calendar_frame,
+                text=f"{hour:02d}:00",
+                font=Fonts.BODY,
+                bg=Colors.GRAY,
+                fg=Colors.TEXT_PRIMARY,
+                width=8,
+                height=3,
+                relief=tk.RIDGE,
+                borderwidth=1
+            )
+            time_label.grid(row=row_idx + 1, column=0, sticky="nsew", padx=1, pady=1)
         
-        canvas.pack(side="left", fill="both", expand=True)
+            # Create cells for each day
+            for col_idx, day in enumerate(days[1:], start=1):
+                # Check if there's a schedule entry for this day and hour
+                entry_found = None
+                for entry in schedule:
+                    if entry["day"] == day:
+                        # Parse time slot
+                        start_time = entry["time_slot"].split("-")[0]
+                        start_hour = int(start_time.split(":")[0])
+                    
+                        # Check if this entry starts at this hour
+                        if start_hour == hour:
+                            entry_found = entry
+                            break
+            
+                if entry_found:
+                    # Get course details
+                    course = CourseManager.get_course(entry_found["course_id"])
+                
+                    if course:
+                        # Determine color and icon
+                        color = course.get('color', Colors.PRIMARY)
+                        icon = "🎓" if entry_found["type"] == "class" else "📚"
+                    
+                        # Create colored entry cell
+                        entry_cell = tk.Label(
+                            calendar_frame,
+                            text=f"{icon}\n{course['name']}\n{entry_found['time_slot']}",
+                            font=Fonts.SMALL,
+                            bg=color,
+                            fg=Colors.WHITE,
+                            width=15,
+                            height=3,
+                            relief=tk.RAISED,
+                            borderwidth=2,
+                            wraplength=100,
+                            justify=tk.CENTER
+                        )
+                        entry_cell.grid(row=row_idx + 1, column=col_idx, sticky="nsew", padx=1, pady=1)
+                    else:
+                        # Empty cell
+                        empty_cell = tk.Label(
+                            calendar_frame,
+                            text="",
+                            bg=Colors.WHITE,
+                            relief=tk.RIDGE,
+                            borderwidth=1
+                        )
+                        empty_cell.grid(row=row_idx + 1, column=col_idx, sticky="nsew", padx=1, pady=1)
+                else:
+                    # Empty cell (no entry at this time)
+                    empty_cell = tk.Label(
+                        calendar_frame,
+                        text="",
+                        bg=Colors.WHITE,
+                        relief=tk.RIDGE,
+                        borderwidth=1,
+                        height=3
+                    )
+                    empty_cell.grid(row=row_idx + 1, column=col_idx, sticky="nsew", padx=1, pady=1)
+    
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True, padx=20, pady=10)
         scrollbar.pack(side="right", fill="y")
+
 
     def show_calendar_view(self):
         """Display visual calendar grid"""

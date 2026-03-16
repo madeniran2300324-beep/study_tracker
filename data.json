@@ -137,70 +137,70 @@
     {
       "id": "sched_1",
       "day": "Monday",
-      "time_slot": "14:00-16:00",
+      "time_slot": "10:00-12:00",
       "course_id": "course_1",
       "type": "study"
     },
     {
       "id": "sched_2",
-      "day": "Tuesday",
-      "time_slot": "16:00-18:00",
+      "day": "Monday",
+      "time_slot": "12:00-14:00",
       "course_id": "course_1",
       "type": "study"
     },
     {
       "id": "sched_3",
-      "day": "Wednesday",
-      "time_slot": "18:00-20:00",
+      "day": "Monday",
+      "time_slot": "14:00-16:00",
       "course_id": "course_1",
       "type": "study"
     },
     {
       "id": "sched_4",
       "day": "Monday",
-      "time_slot": "14:00-16:00",
-      "course_id": "course_2",
-      "type": "study"
-    },
-    {
-      "id": "sched_5",
-      "day": "Tuesday",
       "time_slot": "16:00-18:00",
       "course_id": "course_2",
       "type": "study"
     },
     {
-      "id": "sched_6",
-      "day": "Wednesday",
+      "id": "sched_5",
+      "day": "Monday",
       "time_slot": "18:00-20:00",
       "course_id": "course_2",
       "type": "study"
     },
     {
-      "id": "sched_7",
-      "day": "Thursday",
+      "id": "sched_6",
+      "day": "Monday",
       "time_slot": "20:00-22:00",
       "course_id": "course_2",
       "type": "study"
     },
     {
+      "id": "sched_7",
+      "day": "Tuesday",
+      "time_slot": "08:00-10:00",
+      "course_id": "course_2",
+      "type": "study"
+    },
+    {
       "id": "sched_8",
-      "day": "Monday",
-      "time_slot": "14:00-16:00",
+      "day": "Tuesday",
+      "time_slot": "10:00-12:00",
       "course_id": "course_3",
       "type": "study"
     },
     {
       "id": "sched_9",
       "day": "Tuesday",
-      "time_slot": "16:00-18:00",
+      "time_slot": "12:00-14:00",
       "course_id": "course_3",
       "type": "study"
     },
     {
       "id": "sched_10",
-      "day": "Wednesday",
-      "time_slot": "18:00-20:00",
+      "day": "Tuesday",
+      "time_slot": "16:00-18:00",
       "course_id": "course_3",
       "type": "study"
     }
@@ -209,21 +209,21 @@
     {
       "course_id": "course_1",
       "confidence_level": 2.36,
-      "updated_at": "2026-03-14T13:22:59.898974"
+      "updated_at": "2026-03-16T01:38:29.855882"
     },
     {
       "course_id": "course_2",
       "confidence_level": 2.03,
-      "updated_at": "2026-03-14T13:22:59.900316"
+      "updated_at": "2026-03-16T01:38:29.856954"
     },
     {
       "course_id": "course_3",
       "confidence_level": 1.89,
-      "updated_at": "2026-03-14T13:22:59.901632"
+      "updated_at": "2026-03-16T01:38:29.857860"
     }
   ],
   "metadata": {
     "version": "1.0",
-    "last_updated": "2026-03-14T13:22:59.901673"
+    "last_updated": "2026-03-16T01:38:29.857908"
   }
 }

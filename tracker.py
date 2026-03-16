@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, UTC
+
+BASE_DIR = Path(__file__).parent
 
 # ============================================
 # BASIC DATA OPERATIONS
@@ -8,7 +10,7 @@ from datetime import datetime
 
 def load_data():
     """Load data from JSON file"""
-    data_file = Path("data.json")
+    data_file = BASE_DIR / "data.json"
     
     if not data_file.exists():
         return get_empty_schema()
@@ -37,7 +39,7 @@ def get_empty_schema():
 
 def save_data(data):
     """Save data with atomic write to prevent corruption"""
-    data_file = Path("data.json")
+    data_file = BASE_DIR / "data.json"
     temp_file = data_file.with_suffix(".tmp")
     
     # Update metadata timestamp
@@ -60,7 +62,7 @@ def generate_id(prefix, existing_ids):
 
 def reset_database():
     """Clear all data and start fresh"""
-    data_file = Path("data.json")
+    data_file = BASE_DIR / "data.json"
     if data_file.exists():
         # Backup old data
         backup_name = f"data_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -397,101 +399,116 @@ class ScheduleGenerator:
     def generate_weekly_schedule(total_study_hours=20, session_duration=2):
         """
         Create a complete weekly study schedule
-        
+    
         Args:
             total_study_hours: Total hours available for study per week (default: 20)
             session_duration: Length of each study session in hours (default: 2)
-            
+        
         Returns:
             List of schedule entries ready to be saved to data.json
-            
-        Example:
-            schedule = ScheduleGenerator.generate_weekly_schedule(20, 2)
-            # Returns: [
-            #   {"id": "sched_1", "day": "Monday", "time_slot": "14:00-16:00", 
-            #    "course_id": "course_1", "type": "study"},
-            #   ...
-            # ]
         """
         data = load_data()
         courses = data["courses"]
-        
+    
         if not courses:
             print("No courses found. Add courses first.")
             return []
-        
+    
         # Step 1: Calculate total units across all courses
         total_units = sum(c["units"] for c in courses)
         print(f"\n📊 Total units across all courses: {total_units}")
-        
+    
         # Step 2: Calculate how many hours each course should get
         course_allocations = []
         for course in courses:
-            # Weighted allocation: course gets (its units / total units) × total hours
             allocated_hours = (course["units"] / total_units) * total_study_hours
-            num_sessions = int(allocated_hours / session_duration)  # Round down
-            
+            num_sessions = int(allocated_hours / session_duration)
+        
             course_allocations.append({
                 "course": course,
                 "allocated_hours": allocated_hours,
                 "num_sessions": num_sessions
             })
-            
-            print(f"  {course['name']}: {allocated_hours:.1f} hours ({num_sessions} sessions)")
         
+            print(f"  {course['name']}: {allocated_hours:.1f} hours ({num_sessions} sessions)")
+    
         # Step 3: Create schedule entries
         schedule_entries = []
+    
+        # Track which time slots are already taken
+        occupied_slots = {}  # Format: {day: [list of (start_hour, end_hour)]}
+    
         days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", 
-                       "Friday", "Saturday", "Sunday"]
+                    "Friday", "Saturday", "Sunday"]
+    
+        # Initialize occupied slots with class times
+        for course in courses:
+            for class_time in course.get("schedule", []):
+                day = class_time["day"]
+                start_hour = int(class_time["start"].split(":")[0])
+                end_hour = int(class_time["end"].split(":")[0])
+            
+                if day not in occupied_slots:
+                    occupied_slots[day] = []
+                occupied_slots[day].append((start_hour, end_hour))
+    
+        def is_slot_available(day, start_hour, end_hour):
+            """Check if a time slot is available (no conflicts with classes or other study sessions)"""
+            if day not in occupied_slots:
+                return True
         
-        # Start time for study sessions (2 PM = 14:00)
-        base_start_hour = 14
+            for occupied_start, occupied_end in occupied_slots[day]:
+                # Check for overlap
+                if start_hour < occupied_end and end_hour > occupied_start:
+                    return False
         
-        # Distribute sessions across the week
+            return True
+    
+        def mark_slot_occupied(day, start_hour, end_hour):
+            """Mark a time slot as occupied"""
+            if day not in occupied_slots:
+                occupied_slots[day] = []
+            occupied_slots[day].append((start_hour, end_hour))
+    
+        # Distribute sessions across the week for each course
         for allocation in course_allocations:
             course = allocation["course"]
             sessions_needed = allocation["num_sessions"]
             sessions_created = 0
-            day_index = 0
-            
-            # Try to create sessions for this course
-            while sessions_created < sessions_needed and day_index < len(days_of_week):
-                day = days_of_week[day_index]
-                
-                # Calculate time slot for this session
-                # Space out sessions: first course gets 14:00, next gets 16:00, etc.
-                hour_offset = sessions_created * session_duration
-                start_hour = base_start_hour + hour_offset
-                end_hour = start_hour + session_duration
-                
-                # Make sure we don't go past 10 PM (22:00)
-                if end_hour > 22:
-                    day_index += 1
-                    sessions_created = 0
-                    continue
-                
-                # Check if this time conflicts with class schedule
-                time_slot = f"{start_hour:02d}:00-{end_hour:02d}:00"
-                
-                if not ScheduleGenerator._has_class_conflict(course, day, start_hour, end_hour):
-                    # No conflict - create the study session
-                    entry_id = f"sched_{len(schedule_entries) + 1}"
-                    
-                    schedule_entries.append({
-                        "id": entry_id,
-                        "day": day,
-                        "time_slot": time_slot,
-                        "course_id": course["id"],
-                        "type": "study"
-                    })
-                    
-                    sessions_created += 1
-                    print(f"    ✓ Created: {course['name']} on {day} at {time_slot}")
-                
-                # Move to next potential time slot
-                if sessions_created < sessions_needed:
-                    day_index += 1
         
+            # Try to find available time slots
+            for day in days_of_week:
+                if sessions_created >= sessions_needed:
+                    break
+            
+                # Try different time slots throughout the day
+                # Start from 8 AM to 8 PM (giving 2 hour windows until 10 PM)
+                for start_hour in range(8, 21, 2):  # 8, 10, 12, 14, 16, 18, 20
+                    if sessions_created >= sessions_needed:
+                        break
+                
+                    end_hour = start_hour + session_duration
+                
+                    # Check if this slot is available
+                    if is_slot_available(day, start_hour, end_hour):
+                        # Create study session
+                        time_slot = f"{start_hour:02d}:00-{end_hour:02d}:00"
+                        entry_id = f"sched_{len(schedule_entries) + 1}"
+                    
+                        schedule_entries.append({
+                            "id": entry_id,
+                            "day": day,
+                            "time_slot": time_slot,
+                            "course_id": course["id"],
+                            "type": "study"
+                        })
+                    
+                        # Mark this slot as occupied
+                        mark_slot_occupied(day, start_hour, end_hour)
+                    
+                        sessions_created += 1
+                        print(f"    ✓ Created: {course['name']} on {day} at {time_slot}")
+    
         print(f"\n✓ Generated {len(schedule_entries)} study sessions")
         return schedule_entries
     
